@@ -73,12 +73,6 @@ interface LeadsResponse {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
-const SHEETS_KEY = "google-sheets-list"
-const ACTIVE_SHEET_KEY = "active-sheet-id"
-const CALL_STATUS_KEY = "lead-call-status"
-const NOTES_KEY = "lead-notes"
-const FILTER_DUPLICATES_KEY = "filter-duplicates"
-
 const CALL_STATUS_OPTIONS: { value: CallStatus; label: string; icon: React.ReactNode; color: string }[] = [
   { value: "not_called", label: "Not Called", icon: <Phone className="h-4 w-4" />, color: "text-muted-foreground" },
   { value: "called", label: "Called", icon: <PhoneCall className="h-4 w-4" />, color: "text-green-500" },
@@ -102,44 +96,69 @@ export function TrackerTable() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [noteText, setNoteText] = useState("")
   const [statusFilter, setStatusFilter] = useState<CallStatus | "all">("all")
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+
+  // Use SWR to fetch shared data from Supabase
+  const { data: sheetsData, mutate: mutateSheets } = useSWR<{ sheets: Sheet[] }>(
+    "/api/tracker/sheets",
+    fetcher,
+    { refreshInterval: 5000 }
+  )
+  
+  const { data: statusesData, mutate: mutateStatuses } = useSWR<{ statuses: CallStatusRecord }>(
+    "/api/tracker/call-status",
+    fetcher,
+    { refreshInterval: 5000 }
+  )
+  
+  const { data: notesData, mutate: mutateNotes } = useSWR<{ notes: NotesRecord }>(
+    "/api/tracker/notes",
+    fetcher,
+    { refreshInterval: 5000 }
+  )
+  
+  const { data: settingsData, mutate: mutateSettings } = useSWR<{ settings: { active_sheet_id: string | null; filter_duplicates: boolean } }>(
+    "/api/tracker/settings",
+    fetcher,
+    { refreshInterval: 5000 }
+  )
+
+  // Sync fetched data to state
+  useEffect(() => {
+    if (sheetsData?.sheets) {
+      setSheets(sheetsData.sheets)
+    }
+  }, [sheetsData])
+  
+  useEffect(() => {
+    if (statusesData?.statuses) {
+      setCallStatuses(statusesData.statuses)
+    }
+  }, [statusesData])
+  
+  useEffect(() => {
+    if (notesData?.notes) {
+      setNotes(notesData.notes)
+    }
+  }, [notesData])
+  
+  useEffect(() => {
+    if (settingsData?.settings) {
+      setActiveSheetId(settingsData.settings.active_sheet_id)
+      setFilterDuplicates(settingsData.settings.filter_duplicates)
+      if (settingsData.settings.active_sheet_id) {
+        setShowSettings(false)
+      }
+      setIsInitialLoading(false)
+    }
+  }, [settingsData])
 
   // Mount state for hydration
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Load saved sheets and settings from localStorage on mount
-  useEffect(() => {
-    const savedSheets = localStorage.getItem(SHEETS_KEY)
-    if (savedSheets) {
-      const parsedSheets = JSON.parse(savedSheets) as Sheet[]
-      setSheets(parsedSheets)
-      
-      const savedActiveId = localStorage.getItem(ACTIVE_SHEET_KEY)
-      if (savedActiveId && parsedSheets.find(s => s.id === savedActiveId)) {
-        setActiveSheetId(savedActiveId)
-        setShowSettings(false)
-      } else if (parsedSheets.length > 0) {
-        setActiveSheetId(parsedSheets[0].id)
-        setShowSettings(false)
-      }
-    }
-    
-    const savedStatuses = localStorage.getItem(CALL_STATUS_KEY)
-    if (savedStatuses) {
-      setCallStatuses(JSON.parse(savedStatuses))
-    }
-    
-    const savedNotes = localStorage.getItem(NOTES_KEY)
-    if (savedNotes) {
-      setNotes(JSON.parse(savedNotes))
-    }
-    
-    const savedFilterDuplicates = localStorage.getItem(FILTER_DUPLICATES_KEY)
-    if (savedFilterDuplicates !== null) {
-      setFilterDuplicates(savedFilterDuplicates === "true")
-    }
-  }, [])
+  
 
   // Get active sheet
   const activeSheet = sheets.find(s => s.id === activeSheetId)
@@ -192,56 +211,95 @@ export function TrackerTable() {
     }
   }, [mutate])
 
-  const handleAddSheet = () => {
+  const handleAddSheet = async () => {
     if (inputUrl.trim()) {
-      const newSheet: Sheet = {
-        id: `sheet-${Date.now()}`,
-        label: inputLabel.trim() || `Sheet ${sheets.length + 1}`,
-        url: inputUrl.trim(),
+      const response = await fetch("/api/tracker/sheets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: inputLabel.trim() || `Sheet ${sheets.length + 1}`,
+          url: inputUrl.trim(),
+        }),
+      })
+      const data = await response.json()
+      if (data.sheet) {
+        mutateSheets()
+        setActiveSheetId(data.sheet.id)
+        await fetch("/api/tracker/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            active_sheet_id: data.sheet.id,
+            filter_duplicates: filterDuplicates,
+          }),
+        })
+        mutateSettings()
+        setInputUrl("")
+        setInputLabel("")
+        setShowSettings(false)
       }
-      const newSheets = [...sheets, newSheet]
-      setSheets(newSheets)
-      setActiveSheetId(newSheet.id)
-      localStorage.setItem(SHEETS_KEY, JSON.stringify(newSheets))
-      localStorage.setItem(ACTIVE_SHEET_KEY, newSheet.id)
-      setInputUrl("")
-      setInputLabel("")
-      setShowSettings(false)
     }
   }
 
-  const handleRemoveSheet = (sheetId: string) => {
-    const newSheets = sheets.filter(s => s.id !== sheetId)
-    setSheets(newSheets)
-    localStorage.setItem(SHEETS_KEY, JSON.stringify(newSheets))
+  const handleRemoveSheet = async (sheetId: string) => {
+    await fetch(`/api/tracker/sheets?id=${sheetId}`, { method: "DELETE" })
+    mutateSheets()
     
     if (activeSheetId === sheetId) {
+      const newSheets = sheets.filter(s => s.id !== sheetId)
       const newActiveId = newSheets.length > 0 ? newSheets[0].id : null
       setActiveSheetId(newActiveId)
-      if (newActiveId) {
-        localStorage.setItem(ACTIVE_SHEET_KEY, newActiveId)
-      } else {
-        localStorage.removeItem(ACTIVE_SHEET_KEY)
+      await fetch("/api/tracker/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active_sheet_id: newActiveId,
+          filter_duplicates: filterDuplicates,
+        }),
+      })
+      mutateSettings()
+      if (!newActiveId) {
         setShowSettings(true)
       }
     }
   }
 
-  const handleSelectSheet = (sheetId: string) => {
+  const handleSelectSheet = async (sheetId: string) => {
     setActiveSheetId(sheetId)
-    localStorage.setItem(ACTIVE_SHEET_KEY, sheetId)
+    await fetch("/api/tracker/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        active_sheet_id: sheetId,
+        filter_duplicates: filterDuplicates,
+      }),
+    })
+    mutateSettings()
   }
 
-  const updateCallStatus = (leadId: string, status: CallStatus) => {
+  const updateCallStatus = async (leadId: string, status: CallStatus) => {
     const newStatuses = { ...callStatuses, [leadId]: status }
     setCallStatuses(newStatuses)
-    localStorage.setItem(CALL_STATUS_KEY, JSON.stringify(newStatuses))
+    await fetch("/api/tracker/call-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_id: leadId, status }),
+    })
+    mutateStatuses()
   }
 
-  const toggleFilterDuplicates = () => {
+  const toggleFilterDuplicates = async () => {
     const newValue = !filterDuplicates
     setFilterDuplicates(newValue)
-    localStorage.setItem(FILTER_DUPLICATES_KEY, String(newValue))
+    await fetch("/api/tracker/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        active_sheet_id: activeSheetId,
+        filter_duplicates: newValue,
+      }),
+    })
+    mutateSettings()
   }
 
   const getCallStatus = (leadId: string): CallStatus => {
@@ -256,10 +314,15 @@ export function TrackerTable() {
     return notes[leadId] || ""
   }
 
-  const saveNote = (leadId: string, text: string) => {
+  const saveNote = async (leadId: string, text: string) => {
     const newNotes = { ...notes, [leadId]: text }
     setNotes(newNotes)
-    localStorage.setItem(NOTES_KEY, JSON.stringify(newNotes))
+    await fetch("/api/tracker/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_id: leadId, note: text }),
+    })
+    mutateNotes()
   }
 
   const openNoteEditor = (leadId: string) => {
@@ -315,6 +378,18 @@ export function TrackerTable() {
   const formatLastUpdated = (isoString: string) => {
     const date = new Date(isoString)
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  }
+
+  // Show loading state while fetching initial data
+  if (isInitialLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading tracker data...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
