@@ -31,6 +31,11 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type CallStatus = "not_called" | "called" | "tried" | "no_answer" | "callback"
 
@@ -674,24 +679,76 @@ export function TrackerTable() {
                 ) : (
                   filteredLeads.map((lead) => (
                     <TableRow key={lead.id}>
-                      <TableCell className="overflow-hidden"><span className="block truncate font-medium">{lead.name}</span></TableCell>
+                      <TableCell className="overflow-hidden">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="block truncate font-medium cursor-default">{lead.name}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            {lead.name}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
                       <TableCell className="overflow-hidden">
                         {lead.phone ? (
-                          <a href={`tel:${lead.phone}`} className="block truncate text-primary hover:underline">{lead.phone}</a>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <a href={`tel:${lead.phone}`} className="block truncate text-primary hover:underline">{lead.phone}</a>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              {lead.phone}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : "-"}
                       </TableCell>
                       <TableCell className="hidden overflow-hidden md:table-cell">
                         {lead.email ? (
-                          <a href={`mailto:${lead.email}`} className="block truncate text-primary hover:underline">{lead.email}</a>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <a href={`mailto:${lead.email}`} className="block truncate text-primary hover:underline">{lead.email}</a>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              {lead.email}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : "-"}
                       </TableCell>
                       <TableCell className="overflow-hidden">
                         {lead.type ? (
-                          <Badge variant={getTypeBadgeVariant(lead.type)} className="h-5 max-w-full truncate px-1.5 text-[10px]">{lead.type}</Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant={getTypeBadgeVariant(lead.type)} className="h-5 max-w-full truncate px-1.5 text-[10px] cursor-default">{lead.type}</Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              {lead.type}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : "-"}
                       </TableCell>
-                      <TableCell className="hidden overflow-hidden lg:table-cell"><span className="block truncate">{lead.address || "-"}</span></TableCell>
-                      <TableCell className="hidden overflow-hidden sm:table-cell"><span className="block truncate">{lead.rep || "-"}</span></TableCell>
+                      <TableCell className="hidden overflow-hidden lg:table-cell">
+                        {lead.address ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate cursor-default">{lead.address}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              {lead.address}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell className="hidden overflow-hidden sm:table-cell">
+                        {lead.rep ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate cursor-default">{lead.rep}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              {lead.rep}
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell className="overflow-hidden text-center text-xs text-muted-foreground">{lead.calls}</TableCell>
                       <TableCell>
                         <DropdownMenu>
