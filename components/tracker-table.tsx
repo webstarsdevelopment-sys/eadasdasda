@@ -143,11 +143,13 @@ export function TrackerTable() {
   }, [notesData])
   
   useEffect(() => {
-    if (settingsData?.settings) {
-      setActiveSheetId(settingsData.settings.active_sheet_id)
-      setFilterDuplicates(settingsData.settings.filter_duplicates)
-      if (settingsData.settings.active_sheet_id) {
-        setShowSettings(false)
+    if (settingsData) {
+      if (settingsData.settings) {
+        setActiveSheetId(settingsData.settings.active_sheet_id)
+        setFilterDuplicates(settingsData.settings.filter_duplicates ?? true)
+        if (settingsData.settings.active_sheet_id) {
+          setShowSettings(false)
+        }
       }
       setIsInitialLoading(false)
     }

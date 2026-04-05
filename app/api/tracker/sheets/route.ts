@@ -20,9 +20,12 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const body = await request.json()
   
+  const sheetId = `sheet-${Date.now()}`
+  
   const { data, error } = await supabase
     .from("sheets")
     .insert({
+      id: sheetId,
       label: body.label,
       url: body.url,
     })
